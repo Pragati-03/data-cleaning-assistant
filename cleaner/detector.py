@@ -27,7 +27,8 @@ def detect_issues(df):
         preds = clf.fit_predict(numeric_df)
         outlier_count = (preds == -1).sum()
         issues["outliers"] = {"count": int(outlier_count)}
-
+        
+    issues["duplicates"] = {"count": int(df.duplicated().sum())}
     return issues
 
 
@@ -42,3 +43,24 @@ def explain_outliers(df):
     shap_values = explainer(numeric_df)
     
     return shap_values, numeric_df
+
+def calculate_quality_score(df, issues):
+    score = 100
+
+    # Penalize missing values
+    total_cells = df.shape[0] * df.shape[1]
+    missing_pct = (df.isnull().sum().sum() / total_cells) * 100
+    score -= min(missing_pct * 2, 40)  # max 40 point penalty
+
+    # Penalize outliers
+    outlier_pct = (issues["outliers"]["count"] / df.shape[0]) * 100
+    score -= min(outlier_pct * 2, 30)  # max 30 point penalty
+
+    # Penalize type issues
+    score -= min(len(issues["type_issues"]) * 5, 15)  # max 15 point penalty
+
+    # Penalize duplicates
+    dup_pct = (issues["duplicates"]["count"] / df.shape[0]) * 100
+    score -= min(dup_pct * 2, 15)  # max 15 point penalty
+
+    return round(max(score, 0), 1)
