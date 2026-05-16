@@ -3,7 +3,7 @@
 An ML-powered tool that automatically detects, explains, and fixes data quality issues in any CSV dataset.
 
 ## 🚀 Live Demo
-[Click here to try it live](#)
+[Click here to try it live](https://data-cleaning-assistant-0.streamlit.app/)
 
 ---
 
