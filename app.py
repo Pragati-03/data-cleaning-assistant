@@ -4,29 +4,47 @@ import plotly.express as px
 import matplotlib.pyplot as plt
 import shap
 from cleaner.detector import detect_issues, explain_outliers, calculate_quality_score
-from cleaner.fixer import fix_issues
+from cleaner.fixer import fix_issues_with_log
+from cleaner.rules import evaluate_rules
+from cleaner.near_duplicates import detect_near_duplicates
+from cleaner.pipeline import export_pipeline, load_pipeline
 
 st.set_page_config(page_title="Data Cleaning Assistant", layout="wide", page_icon="🧹")
 
 # Sidebar
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/4149/4149678.png", width=80)
-    st.title("🧹 Data Cleaning Assistant")
+    st.title(" Data Cleaning Assistant")
     st.markdown("---")
     st.markdown("### How it works")
-    st.markdown("1. 📤 Upload your CSV or Excel")
-    st.markdown("2. 🔍 Detect issues automatically")
-    st.markdown("3. 🧠 Explain outliers with SHAP")
-    st.markdown("4. ✨ Auto fix & download")
+    st.markdown("1.  Upload your CSV or Excel")
+    st.markdown("2.  Detect issues automatically")
+    st.markdown("3.  Check custom validation rules")
+    st.markdown("4.  Scan for near-duplicates")
+    st.markdown("5.  Explain outliers with SHAP")
+    st.markdown("6.  Auto fix & download")
+    st.markdown("---")
+
+    st.markdown("###  Load a saved pipeline")
+    pipeline_file = st.file_uploader("Pipeline JSON", type=["json"], key="pipeline_upload")
+    if pipeline_file is not None:
+        try:
+            loaded_rules, loaded_threshold = load_pipeline(pipeline_file.read().decode("utf-8"))
+            st.session_state["_loaded_rules_text"] = "\n".join(loaded_rules)
+            st.session_state["_loaded_threshold"] = loaded_threshold
+            st.success("Pipeline loaded — fields below are pre-filled.")
+        except Exception as e:
+            st.error(f"Could not load pipeline: {e}")
+
     st.markdown("---")
     st.caption("Built with Scikit-learn + SHAP + Streamlit")
 
 # Header
-st.title("🧹 Data Cleaning Assistant")
+st.title(" Data Cleaning Assistant")
 st.markdown("##### Upload a messy CSV or Excel — we'll detect, explain and fix it automatically.")
 st.markdown("---")
 
-uploaded = st.file_uploader("📤 Upload your CSV or Excel file", type=["csv", "xlsx", "xls"])
+uploaded = st.file_uploader(" Upload your CSV or Excel file", type=["csv", "xlsx", "xls"])
 
 if uploaded:
     # File reading — CSV or Excel
@@ -120,6 +138,65 @@ if uploaded:
 
     st.markdown("---")
 
+    # ------------------------------------------------------------------
+    # Custom validation rules
+    # ------------------------------------------------------------------
+    st.subheader("🧩 Custom Validation Rules")
+    st.caption("One rule per line, referencing column names — e.g. `age > 0` or `price <= 100000`")
+    default_rules_text = st.session_state.get("_loaded_rules_text", "")
+    rules_text = st.text_area("Rules", value=default_rules_text, height=100, label_visibility="collapsed")
+
+    if st.button("✅ Check Rules"):
+        rule_list = [r for r in rules_text.splitlines() if r.strip()]
+        if not rule_list:
+            st.info("Add at least one rule above, then check again.")
+        else:
+            rule_results = evaluate_rules(df, rule_list)
+            for rule, res in rule_results.items():
+                if "error" in res:
+                    st.error(f"⚠️ `{rule}` — {res['error']}")
+                elif res["violations"] > 0:
+                    st.warning(f"⚠️ `{rule}` — {res['violations']} row(s) violate this rule")
+                    with st.expander(f"View violating rows — {rule}"):
+                        st.dataframe(df.loc[res["index"]], use_container_width=True)
+                else:
+                    st.success(f"✅ `{rule}` — all rows pass")
+
+    st.markdown("---")
+
+    # ------------------------------------------------------------------
+    # Near-duplicate detection
+    # ------------------------------------------------------------------
+    st.subheader("🧬 Near-Duplicate Detection")
+    st.caption("Finds rows that are highly similar but not identical (typos, casing, whitespace).")
+    default_threshold = st.session_state.get("_loaded_threshold", 0.9)
+    threshold = st.slider("Similarity threshold", 0.70, 0.99, float(default_threshold), 0.01)
+
+    if st.button("🔎 Scan for Near-Duplicates"):
+        with st.spinner("Comparing rows..."):
+            near_dup_result = detect_near_duplicates(df, threshold=threshold)
+        if near_dup_result["count"] > 0:
+            st.warning(f"⚠️ {near_dup_result['count']} near-duplicate pair(s) found "
+                       f"({near_dup_result['mode']} mode)")
+            pair_df = pd.DataFrame(near_dup_result["pairs"], columns=["Row A", "Row B", "Similarity"])
+            st.dataframe(pair_df, use_container_width=True)
+        else:
+            st.success(f"✅ No near-duplicates found ({near_dup_result['mode']} mode)")
+
+    st.markdown("---")
+
+    # ------------------------------------------------------------------
+    # Pipeline export
+    # ------------------------------------------------------------------
+    st.subheader("📦 Cleaning Pipeline")
+    st.caption("Save your current validation rules + near-duplicate threshold to replay on another file.")
+    current_rules = [r for r in rules_text.splitlines() if r.strip()]
+    pipeline_json = export_pipeline(current_rules, threshold)
+    st.download_button("⬇️ Download Pipeline (.json)", pipeline_json, "cleaning_pipeline.json",
+                       use_container_width=True)
+
+    st.markdown("---")
+
     # Charts side by side
     st.subheader("📊 Visual Analysis")
     ch1, ch2 = st.columns(2)
@@ -178,7 +255,7 @@ if uploaded:
     # Fix
     st.subheader("🛠️ Auto Fix Dataset")
     if st.button("✨ Auto Fix Issues"):
-        cleaned_df = fix_issues(df)
+        cleaned_df, imputation_log = fix_issues_with_log(df)
 
         st.markdown("### 📈 Improvement Summary")
         m1, m2, m3 = st.columns(3)
@@ -195,6 +272,22 @@ if uploaded:
                   f"{new_score}/100",
                   delta=f"+{round(new_score - score, 1)} improvement",
                   delta_color="normal")
+
+        # Imputation strategy log
+        with st.expander("🧠 View Smart Imputation Decisions"):
+            log_df = pd.DataFrame.from_dict(imputation_log, orient="index", columns=["Strategy Used"])
+            log_df.index.name = "Column"
+
+            def color_strategy(val):
+                if val == "mean":
+                    return "background-color: #d4edda"
+                elif val == "median":
+                    return "background-color: #fff3cd"
+                else:
+                    return "background-color: #d1ecf1"
+
+            st.dataframe(log_df.style.applymap(color_strategy), use_container_width=True)
+            st.caption("🟢 Mean = normal distribution | 🟡 Median = skewed | 🔵 Mode = categorical")
 
         st.markdown("---")
         c1, c2 = st.columns(2)

@@ -1,26 +1,28 @@
-# 🧹 Data Cleaning Assistant
+# Data Cleaning Assistant
 
-An ML-powered tool that automatically detects, explains, and fixes data quality issues in any CSV dataset.
+A tool that detects, explains, and fixes data quality issues in any CSV or Excel dataset — with a quality score, a change log, and a downloadable audit trail for every fix applied.
 
-## 🚀 Live Demo
-[Click here to try it live](#)
-
----
-
-## 💡 What it does
-
-Most data scientists spend 80% of their time cleaning data. This tool automates that:
-
-- 🟡 **Detects missing values** — shows exactly which columns and how many
-- 🔵 **Catches type issues** — finds numbers accidentally stored as strings
-- 🔴 **Flags outliers** — using Isolation Forest (unsupervised ML)
-- 🧠 **Explains outliers** — SHAP values show *why* a row is suspicious
-- ✨ **Auto fixes** — imputes missing values, corrects types, exports clean CSV
+## Live Demo
+[Try it here](https://data-cleaning-assistant-0.streamlit.app/)
 
 ---
 
+## What it does
 
-## 🛠️ Tech Stack
+Most data scientists spend 80% of their time cleaning data. This tool automates that, without hiding what it's doing:
+
+- **Detects missing values** — which columns, how many
+- **Catches type issues** — numbers accidentally stored as strings
+- **Flags outliers** — Isolation Forest (unsupervised ML)
+- **Explains outliers** — SHAP values show *why* a row is suspicious
+- **Flags duplicate rows** — and removes them on request
+- **Scores data quality** — a single 0–100 score, before and after cleaning
+- **Opt-in fixes** — choose which issues to fix and how, instead of one blanket auto-fix
+- **Change log + report** — every fix is logged; the log is downloadable as a cleaning report alongside the cleaned CSV
+
+---
+
+## Tech Stack
 
 | Tool | Purpose |
 |---|---|
@@ -32,24 +34,25 @@ Most data scientists spend 80% of their time cleaning data. This tool automates 
 
 ---
 
-## 📁 Project Structure
+## Project Structure
+```
 data-cleaning-assistant/
 │
 ├── app.py                  # Streamlit UI
 ├── cleaner/
-│   ├── init.py
-│   ├── detector.py         # Issue detection logic
-│   └── fixer.py            # Auto-fix logic
+│   ├── __init__.py
+│   ├── detector.py         # Issue detection + quality scoring
+│   └── fixer.py            # Per-issue fixes + change log
 ├── requirements.txt
 └── README.md
-
+```
 
 ---
 
-## ⚙️ Run Locally
+## Run Locally
 
 ```bash
-git clone https://github.com/pragati-03/data-cleaning-assistant
+git clone https://github.com/Pragati-03/data-cleaning-assistant
 cd data-cleaning-assistant
 pip install -r requirements.txt
 streamlit run app.py
@@ -57,15 +60,14 @@ streamlit run app.py
 
 ---
 
-## 🧠 ML Concepts Used
+## ML Concepts Used
 
 - **Isolation Forest** — unsupervised anomaly detection algorithm that isolates outliers by randomly partitioning data
 - **SHAP (SHapley Additive exPlanations)** — explains model predictions by showing feature contributions
-- **SimpleImputer** — fills missing values using median (numeric) and mode (categorical) strategies
+- **SimpleImputer** — fills missing values using median/mean (numeric) and mode (categorical) strategies
 
 ---
 
+## About
 
-## 🙋 About
-
-Built as a portfolio project to demonstrate practical ML engineering and data preprocessing automation skills.
+Built as a portfolio project to demonstrate practical ML engineering and data preprocessing automation skills — with an emphasis on auditability (change logs, before/after scoring) over a black-box "auto fix" button.

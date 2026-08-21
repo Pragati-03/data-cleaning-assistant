@@ -27,24 +27,32 @@ def detect_issues(df):
         preds = clf.fit_predict(numeric_df)
         outlier_count = (preds == -1).sum()
         issues["outliers"] = {"count": int(outlier_count)}
-        
+    else:
+        issues["outliers"] = {"count": 0}
+
     issues["duplicates"] = {"count": int(df.duplicated().sum())}
     return issues
 
 
 def explain_outliers(df):
     from sklearn.ensemble import IsolationForest
-    
+
     numeric_df = df.select_dtypes(include="number").dropna()
     clf = IsolationForest(contamination=0.05, random_state=42)
     clf.fit(numeric_df)
-    
-    explainer = shap.Explainer(clf, numeric_df)
+
+    # IsolationForest itself isn't callable — SHAP needs a function that
+    # takes an array and returns scores. decision_function gives the
+    # anomaly score (lower = more anomalous), which is what we want to explain.
+    explainer = shap.Explainer(clf.decision_function, numeric_df)
     shap_values = explainer(numeric_df)
-    
+
     return shap_values, numeric_df
 
 def calculate_quality_score(df, issues):
+    if df.shape[0] == 0 or df.shape[1] == 0:
+        return 0.0
+
     score = 100
 
     # Penalize missing values
@@ -53,14 +61,16 @@ def calculate_quality_score(df, issues):
     score -= min(missing_pct * 2, 40)  # max 40 point penalty
 
     # Penalize outliers
-    outlier_pct = (issues["outliers"]["count"] / df.shape[0]) * 100
+    outlier_count = issues.get("outliers", {}).get("count", 0)
+    outlier_pct = (outlier_count / df.shape[0]) * 100
     score -= min(outlier_pct * 2, 30)  # max 30 point penalty
 
     # Penalize type issues
-    score -= min(len(issues["type_issues"]) * 5, 15)  # max 15 point penalty
+    score -= min(len(issues.get("type_issues", {})) * 5, 15)  # max 15 point penalty
 
     # Penalize duplicates
-    dup_pct = (issues["duplicates"]["count"] / df.shape[0]) * 100
+    dup_count = issues.get("duplicates", {}).get("count", 0)
+    dup_pct = (dup_count / df.shape[0]) * 100
     score -= min(dup_pct * 2, 15)  # max 15 point penalty
 
     return round(max(score, 0), 1)
